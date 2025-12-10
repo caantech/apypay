@@ -34,9 +34,6 @@ Resolved Dependency
 Code: jsr​:​@supabase/functions-js/edge-runtime.d.ts (https://jsr.io/@supabase/functions-js/2.86.0/src/edge-runtime.d.ts)
  ```
 
-  <!-- ignore -->
-  <!-- - ran `supabase functions serve direct-stk` to test the function locally. -->
-
 ## error report and fixes
 
 ### Missing Version in JSR Specifier
@@ -58,3 +55,8 @@ import "jsr:@supabase/functions-js@^2.86.0/edge-runtime.d.ts"
 ```
 
 The `@^2.86.0` version specifier uses caret syntax, allowing minor and patch updates while maintaining API compatibility with version 2.86.0. This resolves the linting error and follows JSR best practices for dependency management in Deno environments.
+
+### Testing the Function Locally
+
+- ran `supabase functions serve direct-stk` to test the function locally.
+- made a POST request using curl to test the function and it worked.
