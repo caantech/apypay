@@ -68,6 +68,14 @@ interface MpesaResponse {
   RequestID?: string
 }
 
+// M-Pesa API Configuration
+// Use MPESA_API_ENV environment variable to switch between 'sandbox' and 'production'
+// Defaults to 'production' for security
+const MPESA_ENV = Deno.env.get("MPESA_API_ENV") || "production"
+const MPESA_BASE_URL = MPESA_ENV === "sandbox"
+  ? "https://sandbox.safaricom.co.ke"
+  : "https://api.safaricom.co.ke"
+
 // Function to get M-Pesa access token
 async function getMpesaAccessToken(
   consumerKey: string,
@@ -75,8 +83,12 @@ async function getMpesaAccessToken(
 ): Promise<string> {
   const auth = btoa(`${consumerKey}:${consumerSecret}`)
   
+  const tokenUrl = `${MPESA_BASE_URL}/oauth/v1/generate?grant_type=client_credentials`
+  
+  console.log(`Getting M-Pesa token from: ${tokenUrl}`)
+  
   const response = await fetch(
-    "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
+    tokenUrl,
     {
       method: "GET",
       headers: {
@@ -84,6 +96,12 @@ async function getMpesaAccessToken(
       },
     },
   )
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    console.error(`M-Pesa token error: ${response.status} - ${errorText}`)
+    throw new Error(`Failed to get M-Pesa access token: ${response.status}`)
+  }
 
   const data = await response.json() as Record<string, string>
   return data.access_token
@@ -153,7 +171,7 @@ async function initiateSTKPush(
   }
 
   const response = await fetch(
-    "https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest",
+    `${MPESA_BASE_URL}/mpesa/stkpush/v1/processrequest`,
     {
       method: "POST",
       headers: {
@@ -163,6 +181,11 @@ async function initiateSTKPush(
       body: JSON.stringify(payload),
     },
   )
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    console.error(`M-Pesa STK error: ${response.status} - ${errorText}`)
+  }
 
   const result = await response.json() as MpesaResponse
   return result
@@ -338,6 +361,8 @@ Deno.serve(async (req) => {
       JSON.stringify({
         error: "Internal server error",
         details: error instanceof Error ? error.message : String(error),
+        mpesaEnv: MPESA_ENV,
+        mpesaBaseUrl: MPESA_BASE_URL,
       }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     )
