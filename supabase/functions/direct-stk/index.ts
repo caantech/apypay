@@ -321,46 +321,39 @@ Deno.serve(async (req) => {
     // in the database with status='pending' to track it until callback arrives.
     // ==============================================================================
     try {
-      console.log("Attempting to insert pending transaction via Supabase REST API...")
+      console.log("Starting pending transaction insert for CheckoutRequestID:", stkPushResponse.CheckoutRequestID)
       
       const transactionData = {
         checkout_request_id: stkPushResponse.CheckoutRequestID,
-        merchant_request_id: stkPushResponse.RequestID,
+        merchant_request_id: stkPushResponse.RequestID || "",
         business_id: body.business_id,
         account_reference: body.account_reference,
         phone_number: phoneValidation.formattedPhone,
         amount: Number(body.amount),
-        result_code: 0,
+        result_code: -1,
         result_desc: "STK Push initiated - awaiting customer response",
+        mpesa_receipt_number: "",
+        transaction_date: "",
         status: "pending",
-        callback_raw: stkPushResponse,
       }
       
-      console.log("Transaction data to insert:", JSON.stringify(transactionData))
+      console.log("Transaction data:", JSON.stringify(transactionData))
       
-      // Use Supabase REST API directly via fetch
-      const apiUrl = `${supabaseUrl}/rest/v1/transactions`
-      const insertResponse = await fetch(apiUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${supabaseKey}`,
-          "Prefer": "return=representation",
-        },
-        body: JSON.stringify(transactionData),
-      })
-
-      const insertResult = await insertResponse.json()
+      // Use Supabase JS client with service role key
+      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
+      const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey || supabaseKey)
       
-      if (!insertResponse.ok) {
-        console.error("Database insert error via REST API:", insertResponse.status, JSON.stringify(insertResult))
-        // Log error but don't fail the request since STK was initiated successfully
+      const { data, error } = await supabaseAdmin
+        .from("transactions")
+        .insert([transactionData])
+      
+      if (error) {
+        console.error("Insert error:", error.message, error.code)
       } else {
-        console.log("Pending transaction recorded successfully via REST API:", JSON.stringify(insertResult))
+        console.log("✓ Pending transaction inserted with business_id:", body.business_id)
       }
     } catch (err) {
-      console.error("Exception while recording pending transaction:", err)
-      // Log error but don't fail the request since STK was initiated successfully
+      console.error("Exception:", err instanceof Error ? err.message : String(err))
     }
 
     // Return successful response

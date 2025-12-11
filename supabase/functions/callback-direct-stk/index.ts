@@ -53,15 +53,12 @@ function extractCallbackMetadata(
 
 // Map M-Pesa result codes to specific transaction statuses
 function mapResultCodeToStatus(resultCode: number): string {
-  const statusMap: Record<number, string> = {
-    0: "completed",           // Successfully paid
-    1: "insufficient_funds",  // Insufficient funds in customer account
-    2: "insufficient_amount", // Less than minimum transaction value
-    17: "cancelled",          // Transaction cancelled by user
-    // Add more codes as encountered
-  }
-
-  return statusMap[resultCode] || "failed" // Default to 'failed' for unknown codes
+  if (resultCode === -1) return "pending"
+  if (resultCode === 0) return "completed"
+  if (resultCode === 1) return "insufficient_funds"
+  if (resultCode === 2) return "insufficient_amount"
+  if (resultCode === 17) return "cancelled"
+  return "failed"
 }
 
 Deno.serve(async (req) => {
@@ -95,65 +92,26 @@ Deno.serve(async (req) => {
       : {}
 
     console.log("Extracted metadata:", JSON.stringify(metadata))
+    console.log("Full stkCallback:", JSON.stringify(stkCallback))
 
     // Extract business_id from account reference (format: "business_id:account_reference")
-    // Try multiple sources for AccountReference
-    const accountRef = String(
+    let accountRef = String(
       metadata.AccountReference || 
       metadata.account_reference ||
+      (stkCallback as Record<string, unknown>).AccountReference ||
       stkCallback.CheckoutRequestID
     )
     
-    console.log("Account reference:", accountRef)
+    console.log("Account reference from callback:", accountRef)
     
-    let [businessId, actualAccountReference] = accountRef.includes(":")
-      ? accountRef.split(":", 1).length === 2 
-        ? accountRef.split(":")
-        : ["unknown", accountRef]
-      : ["unknown", accountRef]
+    let actualAccountReference = accountRef.includes(":")
+      ? accountRef.split(":")[1]
+      : accountRef
 
-    console.log("Parsed business_id:", businessId, "account_reference:", actualAccountReference)
-
-    // If business_id is still unknown, try to look it up from pending transactions
-    if (businessId === "unknown") {
-      console.log("Business ID unknown, attempting to look up from pending transactions...")
-      const supabaseUrl = Deno.env.get("SUPABASE_URL")
-      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ||
-        Deno.env.get("SUPABASE_ANON_KEY")
-      
-      if (supabaseUrl && supabaseKey) {
-        const supabase = createClient(supabaseUrl, supabaseKey)
-        const { data: pendingTx } = await supabase
-          .from("transactions")
-          .select("business_id")
-          .eq("checkout_request_id", stkCallback.CheckoutRequestID)
-          .single()
-        
-        if (pendingTx?.business_id) {
-          businessId = pendingTx.business_id
-          console.log("Found business_id from pending transaction:", businessId)
-        }
-      }
-    }
+    console.log("Parsed account_reference:", actualAccountReference)
 
     // Map M-Pesa result code to specific status
     const transactionStatus = mapResultCodeToStatus(stkCallback.ResultCode)
-
-    // Prepare transaction record
-    const transactionRecord: TransactionRecord = {
-      checkout_request_id: stkCallback.CheckoutRequestID,
-      merchant_request_id: stkCallback.MerchantRequestID,
-      business_id: businessId === "unknown" ? "caan-developers" : businessId, // Fallback to first business
-      account_reference: actualAccountReference,
-      phone_number: String(metadata.PhoneNumber || ""),
-      amount: Number(metadata.Amount || 0),
-      result_code: stkCallback.ResultCode,
-      result_desc: stkCallback.ResultDesc,
-      mpesa_receipt_number: String(metadata.MpesaReceiptNumber || ""),
-      transaction_date: String(metadata.TransactionDate || ""),
-      callback_raw: stkCallback,
-      status: transactionStatus,
-    }
 
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get("SUPABASE_URL")
@@ -170,25 +128,32 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey)
 
-    // Store transaction record in database
+    // Update the pending transaction with callback result
     const { data, error } = await supabase
       .from("transactions")
-      .insert([transactionRecord])
+      .update({
+        result_code: stkCallback.ResultCode,
+        result_desc: stkCallback.ResultDesc,
+        mpesa_receipt_number: String(metadata.MpesaReceiptNumber || ""),
+        transaction_date: String(metadata.TransactionDate || ""),
+        status: transactionStatus,
+      })
+      .eq("checkout_request_id", stkCallback.CheckoutRequestID)
       .select()
 
     if (error) {
-      console.error("Database error:", error)
+      console.error("Database error:", error.message)
       // Log error but still return 200 to M-Pesa to prevent retries
       return new Response(
         JSON.stringify({
           ResultCode: 0,
-          ResultDesc: "Callback received but database storage failed",
+          ResultDesc: "Callback received but database update failed",
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       )
     }
 
-    console.log("Transaction recorded successfully:", data)
+    console.log("✓ Transaction updated successfully:", data)
 
     // ==============================================================================
     // WEBHOOK TRIGGER - Transaction Status Update Notification
