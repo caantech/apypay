@@ -4,6 +4,7 @@
 
 // Setup type definitions for built-in Supabase Runtime APIs
 import "jsr:@supabase/functions-js@^2.86.0/edge-runtime.d.ts"
+import { createClient } from "jsr:@supabase/supabase-js@^2.43.0"
 
 // Interface for the incoming request
 interface STKPushRequest {
@@ -17,11 +18,15 @@ interface STKPushRequest {
 // List of valid businesses using the API
 const VALID_BUSINESSES = ["caan-developers", "caan-tech-foundation", "taji-ai"]
 
-// Function to validate business ID
-function validateBusinessId(businessId: string): {
+// Function to validate business ID against database
+async function validateBusinessId(
+  businessId: string,
+  supabaseUrl: string,
+  supabaseKey: string,
+): Promise<{
   valid: boolean
   error?: string
-} {
+}> {
   if (!businessId || businessId.trim() === "") {
     return {
       valid: false,
@@ -29,14 +34,30 @@ function validateBusinessId(businessId: string): {
     }
   }
 
-  if (!VALID_BUSINESSES.includes(businessId.toLowerCase())) {
+  try {
+    const supabase = createClient(supabaseUrl, supabaseKey)
+    const { data, error } = await supabase
+      .from("clients")
+      .select("id, status")
+      .eq("business_id", businessId.toLowerCase())
+      .eq("status", "active")
+      .single()
+
+    if (error || !data) {
+      return {
+        valid: false,
+        error: `Invalid or inactive business ID: ${businessId}`,
+      }
+    }
+
+    return { valid: true }
+  } catch (err) {
+    console.error("Error validating business ID:", err)
     return {
       valid: false,
-      error: `Invalid business ID. Valid businesses are: ${VALID_BUSINESSES.join(", ")}`,
+      error: "Business validation error",
     }
   }
-
-  return { valid: true }
 }
 
 // Interface for M-Pesa API response
@@ -171,7 +192,23 @@ Deno.serve(async (req) => {
     }
 
     // Validate business ID
-    const businessValidation = validateBusinessId(body.business_id)
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ||
+      Deno.env.get("SUPABASE_ANON_KEY")
+
+    if (!supabaseUrl || !supabaseKey) {
+      console.error("Missing Supabase configuration")
+      return new Response(
+        JSON.stringify({ error: "Server configuration error" }),
+        { status: 500, headers: { "Content-Type": "application/json" } },
+      )
+    }
+
+    const businessValidation = await validateBusinessId(
+      body.business_id,
+      supabaseUrl,
+      supabaseKey,
+    )
     if (!businessValidation.valid) {
       return new Response(
         JSON.stringify({
@@ -201,8 +238,6 @@ Deno.serve(async (req) => {
         { status: 400, headers: { "Content-Type": "application/json" } },
       )
     }
-
-    // Get environment variables
     const consumerKey = Deno.env.get("MPESA_CONSUMER_KEY")
     const consumerSecret = Deno.env.get("MPESA_CONSUMER_SECRET")
     const businessShortCode = Deno.env.get("MPESA_BUSINESS_SHORT_CODE")

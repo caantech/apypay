@@ -1,22 +1,67 @@
 # Business Tracking Implementation
 
 ## Overview
-Updated the M-Pesa edge functions to support multi-tenant payment tracking by business. This allows you to manage payouts separately for each business (Caan Developers, Caan Tech Foundation, and Taji AI).
+Updated the M-Pesa edge functions to support multi-tenant payment tracking by business using a dedicated `clients` table. This allows you to manage payouts separately for each business (Caan Developers, Caan Tech Foundation, and Taji AI) with proper database referential integrity.
 
-## Changes Made
+## Database Schema
 
-### 1. Updated `direct-stk` Function
+### Clients Table
+Stores business/client information:
+```sql
+CREATE TABLE clients (
+  id UUID PRIMARY KEY,
+  business_id TEXT UNIQUE NOT NULL,
+  business_name TEXT NOT NULL,
+  contact_email TEXT,
+  contact_phone TEXT,
+  api_key TEXT UNIQUE NOT NULL,
+  status TEXT DEFAULT 'active',
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP
+);
+```
+
+**Indexed columns:**
+- `business_id` - For fast business lookups
+- `status` - To filter active/inactive clients
+- `api_key` - For future API authentication
+
+**Initial clients inserted:**
+- `caan-developers` - Caan Developers
+- `caan-tech-foundation` - Caan Tech Foundation
+- `taji-ai` - Taji AI
+
+### Transactions Table
+Stores payment records with foreign key to clients:
+```sql
+CREATE TABLE transactions (
+  id UUID PRIMARY KEY,
+  checkout_request_id TEXT UNIQUE NOT NULL,
+  merchant_request_id TEXT NOT NULL,
+  business_id TEXT NOT NULL REFERENCES clients(business_id),
+  account_reference TEXT NOT NULL,
+  phone_number TEXT NOT NULL,
+  amount NUMERIC NOT NULL,
+  result_code INTEGER NOT NULL,
+  result_desc TEXT NOT NULL,
+  mpesa_receipt_number TEXT,
+  transaction_date TEXT,
+  callback_raw JSONB,
+  status TEXT DEFAULT 'pending',
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP
+);
+```
 **File:** `supabase/functions/direct-stk/index.ts`
 
 #### New Field
 - Added `business_id` to the request payload (required field)
 
-#### New Validation
-- `validateBusinessId()` function validates against allowed businesses:
-  - `caan-developers`
-  - `caan-tech-foundation`
-  - `taji-ai`
-- Returns clear error messages if business_id is invalid
+#### Business ID Validation
+- Now validates `business_id` against the `clients` table in the database
+- Only allows active clients to initiate transactions
+- Returns error if business_id doesn't exist or is inactive
+- This provides referential integrity and prevents invalid business IDs
 
 #### Updated Request Format
 ```json
@@ -133,11 +178,14 @@ ORDER BY created_at DESC;
 
 ## Benefits
 
-1. **Easy Business Identification** - Know immediately which business initiated each transaction
-2. **Payout Management** - Filter transactions by business to manage payouts separately
-3. **Audit Trail** - Complete history of which business made which transaction
-4. **Analytics** - Generate reports per business (total collections, transaction count, etc.)
-5. **Separation of Concerns** - Each business's transactions are cleanly separated
+1. **Referential Integrity** - Foreign key ensures only valid businesses can create transactions
+2. **Easy Business Management** - Add/remove/deactivate businesses without code changes
+3. **Business Metadata** - Store contact info, email, phone for each business
+4. **API Keys** - Each business gets unique API key (for future authentication)
+5. **Soft Delete** - Deactivate businesses without losing transaction history
+6. **Audit Trail** - Track when businesses are added/updated/deactivated
+7. **Easy Filtering** - Query transactions per business for payout management
+8. **Analytics** - Generate reports per business (total collections, transaction count, etc.)
 
 ## Next Steps
 
