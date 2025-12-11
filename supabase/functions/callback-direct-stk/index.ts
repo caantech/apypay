@@ -51,6 +51,19 @@ function extractCallbackMetadata(
   return metadata
 }
 
+// Map M-Pesa result codes to specific transaction statuses
+function mapResultCodeToStatus(resultCode: number): string {
+  const statusMap: Record<number, string> = {
+    0: "completed",           // Successfully paid
+    1: "insufficient_funds",  // Insufficient funds in customer account
+    2: "insufficient_amount", // Less than minimum transaction value
+    17: "cancelled",          // Transaction cancelled by user
+    // Add more codes as encountered
+  }
+
+  return statusMap[resultCode] || "failed" // Default to 'failed' for unknown codes
+}
+
 Deno.serve(async (req) => {
   // Only accept POST requests
   if (req.method !== "POST") {
@@ -87,6 +100,9 @@ Deno.serve(async (req) => {
       ? accountRef.split(":")
       : ["unknown", accountRef]
 
+    // Map M-Pesa result code to specific status
+    const transactionStatus = mapResultCodeToStatus(stkCallback.ResultCode)
+
     // Prepare transaction record
     const transactionRecord: TransactionRecord = {
       checkout_request_id: stkCallback.CheckoutRequestID,
@@ -100,7 +116,7 @@ Deno.serve(async (req) => {
       mpesa_receipt_number: String(metadata.MpesaReceiptNumber || ""),
       transaction_date: String(metadata.TransactionDate || ""),
       callback_raw: stkCallback,
-      status: stkCallback.ResultCode === 0 ? "success" : "failed",
+      status: transactionStatus,
     }
 
     // Initialize Supabase client
@@ -180,7 +196,7 @@ Deno.serve(async (req) => {
             account_reference: actualAccountReference,
             phone_number: metadata.PhoneNumber,
             amount: metadata.Amount,
-            status: stkCallback.ResultCode === 0 ? "success" : "failed",
+            status: transactionStatus,
             result_code: stkCallback.ResultCode,
             result_desc: stkCallback.ResultDesc,
             mpesa_receipt_number: metadata.MpesaReceiptNumber,
@@ -215,11 +231,12 @@ Deno.serve(async (req) => {
     */
 
     // Log callback details
-    console.log(`Payment ${stkCallback.ResultCode === 0 ? "successful" : "failed"}:`, {
+    console.log(`Payment ${transactionStatus}:`, {
       businessId: businessId,
       checkoutRequestID: stkCallback.CheckoutRequestID,
       resultCode: stkCallback.ResultCode,
       resultDesc: stkCallback.ResultDesc,
+      status: transactionStatus,
       amount: metadata.Amount,
       phoneNumber: metadata.PhoneNumber,
       mpesaReceiptNumber: metadata.MpesaReceiptNumber,
