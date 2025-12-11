@@ -138,6 +138,82 @@ Deno.serve(async (req) => {
 
     console.log("Transaction recorded successfully:", data)
 
+    // ==============================================================================
+    // WEBHOOK TRIGGER - Transaction Status Update Notification
+    // ==============================================================================
+    // After the transaction status is updated in the database, a webhook POST request
+    // should be sent to notify the business system about the payment result.
+    // 
+    // Flow:
+    // 1. M-Pesa sends callback with payment result (success/failed)
+    // 2. Transaction status is updated in database
+    // 3. Webhook URL (from clients table) is invoked with transaction details
+    // 4. Business system receives notification and updates their records
+    //
+    // TODO: Implement webhook notification
+    // - Retrieve webhook_url from clients table for the business
+    // - Prepare payload with transaction details and status code
+    // - Send POST request to webhook URL
+    // - Handle webhook failures (retry logic, logging)
+    // ==============================================================================
+    
+    // TODO: Uncomment and implement webhook notification
+    /*
+    try {
+      // 1. Get webhook URL for this business from clients table
+      const { data: clientData } = await supabase
+        .from("clients")
+        .select("webhook_url")
+        .eq("business_id", businessId)
+        .single()
+
+      const webhookUrl = clientData?.webhook_url
+
+      if (webhookUrl) {
+        // 2. Prepare webhook payload with transaction details
+        const webhookPayload = {
+          event: "transaction.status_updated",
+          timestamp: new Date().toISOString(),
+          data: {
+            checkout_request_id: stkCallback.CheckoutRequestID,
+            business_id: businessId,
+            account_reference: actualAccountReference,
+            phone_number: metadata.PhoneNumber,
+            amount: metadata.Amount,
+            status: stkCallback.ResultCode === 0 ? "success" : "failed",
+            result_code: stkCallback.ResultCode,
+            result_desc: stkCallback.ResultDesc,
+            mpesa_receipt_number: metadata.MpesaReceiptNumber,
+            transaction_date: metadata.TransactionDate,
+          },
+        }
+
+        // 3. Send POST request to business webhook URL
+        const webhookResponse = await fetch(webhookUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(webhookPayload),
+        })
+
+        if (!webhookResponse.ok) {
+          console.error(
+            `Webhook failed for ${businessId}:`,
+            webhookResponse.status,
+            await webhookResponse.text(),
+          )
+          // TODO: Implement retry logic or queue failed webhooks
+        } else {
+          console.log(`Webhook sent successfully to ${businessId}`)
+        }
+      }
+    } catch (webhookError) {
+      console.error("Error sending webhook:", webhookError)
+      // TODO: Queue failed webhook for retry
+    }
+    */
+
     // Log callback details
     console.log(`Payment ${stkCallback.ResultCode === 0 ? "successful" : "failed"}:`, {
       businessId: businessId,

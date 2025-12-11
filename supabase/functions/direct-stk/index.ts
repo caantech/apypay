@@ -169,6 +169,24 @@ async function initiateSTKPush(
 }
 
 Deno.serve(async (req) => {
+  // ==============================================================================
+  // STK PUSH INITIATION - Transaction Lifecycle Start
+  // ==============================================================================
+  // When STK Push is initiated, the transaction flow is:
+  // 1. Client calls this endpoint to initiate payment
+  // 2. M-Pesa API is called with customer phone number
+  // 3. If successful, a CheckoutRequestID is returned
+  // 4. TODO: Transaction should be stored in database with status: 'pending'
+  // 5. Customer is prompted to enter M-Pesa PIN
+  // 6. M-Pesa processes the payment and calls our callback endpoint
+  // 7. Callback updates transaction status to 'success' or 'failed'
+  // 8. Callback triggers webhook to notify business system
+  //
+  // Current limitation: No pending transaction is stored on initiation.
+  // TODO: After M-Pesa returns CheckoutRequestID, insert transaction record
+  //       with status='pending' and checkout_request_id to track payment status
+  // ==============================================================================
+
   // Only accept POST requests
   if (req.method !== "POST") {
     return new Response(
@@ -264,6 +282,32 @@ Deno.serve(async (req) => {
 
     // Log the response
     console.log("STK Push Response:", stkPushResponse)
+
+    // ==============================================================================
+    // TODO: Store Pending Transaction After STK Initiation
+    // ==============================================================================
+    // When M-Pesa returns a successful CheckoutRequestID, we should store the
+    // transaction in the database with status='pending' to track it.
+    //
+    // Insert into transactions table:
+    // {
+    //   checkout_request_id: stkPushResponse.CheckoutRequestID,
+    //   merchant_request_id: stkPushResponse.RequestID,
+    //   business_id: body.business_id,
+    //   account_reference: body.account_reference,
+    //   phone_number: formattedPhone,
+    //   amount: body.amount,
+    //   result_code: 0,
+    //   result_desc: "STK Push initiated",
+    //   status: 'pending',
+    //   callback_raw: stkPushResponse
+    // }
+    //
+    // This allows tracking:
+    // - Which transactions are awaiting payment
+    // - How long customers take to respond
+    // - Abandoned transactions (never get callback)
+    // ==============================================================================
 
     // Check if the request was successful
     if (stkPushResponse.ResponseCode !== "0") {

@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS clients (
   contact_email TEXT,
   contact_phone TEXT,
   api_key TEXT UNIQUE NOT NULL,
+  webhook_url TEXT,
   status TEXT NOT NULL DEFAULT 'active',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -20,6 +21,7 @@ CREATE INDEX idx_clients_api_key ON clients(api_key);
 COMMENT ON TABLE clients IS 'Stores client/business information for M-Pesa payment API';
 COMMENT ON COLUMN clients.business_id IS 'Unique business identifier';
 COMMENT ON COLUMN clients.api_key IS 'API key for authenticating requests';
+COMMENT ON COLUMN clients.webhook_url IS 'Webhook URL to receive transaction status updates (POST request with transaction data)';
 
 -- Insert initial clients
 INSERT INTO clients (business_id, business_name, contact_email, status, api_key) VALUES
