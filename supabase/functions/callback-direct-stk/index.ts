@@ -94,11 +94,25 @@ Deno.serve(async (req) => {
       ? extractCallbackMetadata(stkCallback.CallbackMetadata.Item)
       : {}
 
+    console.log("Extracted metadata:", JSON.stringify(metadata))
+
     // Extract business_id from account reference (format: "business_id:account_reference")
-    const accountRef = String(metadata.AccountReference || stkCallback.CheckoutRequestID)
+    // Try multiple sources for AccountReference
+    const accountRef = String(
+      metadata.AccountReference || 
+      metadata.account_reference ||
+      stkCallback.CheckoutRequestID
+    )
+    
+    console.log("Account reference:", accountRef)
+    
     const [businessId, actualAccountReference] = accountRef.includes(":")
-      ? accountRef.split(":")
+      ? accountRef.split(":", 1).length === 2 
+        ? accountRef.split(":")
+        : ["unknown", accountRef]
       : ["unknown", accountRef]
+
+    console.log("Parsed business_id:", businessId, "account_reference:", actualAccountReference)
 
     // Map M-Pesa result code to specific status
     const transactionStatus = mapResultCodeToStatus(stkCallback.ResultCode)

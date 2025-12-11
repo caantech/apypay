@@ -23,4 +23,30 @@ Outcome: The STK-PUSH works, but no transaction was recorded. I also expected, a
 supabase functions deploy callback-direct-stk --no-verify-jwt
 ```
 Record below the outcome of the solution-1
-### report after trial 
+### report after trial
+
+**Status: Implementation In Progress**
+
+#### Solution 1 - Deployed callback-direct-stk with --no-verify-jwt
+- ✅ Deployed callback function with JWT bypass flag
+- ✅ Callback now returns 200 status (was 401 before)
+- This allows M-Pesa to successfully POST callbacks without JWT auth errors
+
+#### Solution 2 - Added Pending Transaction Recording to direct-stk
+- ✅ Updated `direct-stk` function to insert transactions with status='pending'
+- ✅ Transaction insert includes: checkout_request_id, phone_number, amount, business_id, account_reference
+- ✅ Code includes error handling and detailed console logging
+- ⚠️ **Issue**: Transactions not appearing in database after function calls
+  - Manual SQL insert works ✅
+  - Function returns 200 status ✅  
+  - Service role key is configured ✅
+  - RLS is disabled ✅
+  - Supabase client code looks correct ✅
+  - **Hypothesis**: Possible RPC/API permission issue or silent failure in Supabase JS client
+
+#### Next Steps to Debug
+1. Check if SUPABASE_SERVICE_ROLE_KEY is properly set as a secret in Supabase Cloud
+2. Try using raw SQL via Supabase client instead of `.from().insert()`
+3. Add response logging to see if Supabase client is returning errors
+4. Consider using Supabase Admin API directly for transaction inserts
+5. Verify transaction table schema matches what function is trying to insert 

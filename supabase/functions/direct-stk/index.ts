@@ -161,7 +161,7 @@ async function initiateSTKPush(
     PartyA: formattedPhone,
     PartyB: businessShortCode,
     PhoneNumber: formattedPhone,
-    CallBackURL: Deno.env.get("CALLBACK_URL") || "https://your-callback-url/callback",
+    CallBackURL: Deno.env.get("CALLBACK_URL") || "https://sgyoocjbdfwzygmpmurc.supabase.co/functions/v1/callback-direct-stk",
     AccountReference: `${request.business_id}:${request.account_reference}`,
     TransactionDesc: request.transaction_desc,
   }
@@ -302,32 +302,6 @@ Deno.serve(async (req) => {
     // Log the response
     console.log("STK Push Response:", stkPushResponse)
 
-    // ==============================================================================
-    // TODO: Store Pending Transaction After STK Initiation
-    // ==============================================================================
-    // When M-Pesa returns a successful CheckoutRequestID, we should store the
-    // transaction in the database with status='pending' to track it.
-    //
-    // Insert into transactions table:
-    // {
-    //   checkout_request_id: stkPushResponse.CheckoutRequestID,
-    //   merchant_request_id: stkPushResponse.RequestID,
-    //   business_id: body.business_id,
-    //   account_reference: body.account_reference,
-    //   phone_number: formattedPhone,
-    //   amount: body.amount,
-    //   result_code: 0,
-    //   result_desc: "STK Push initiated",
-    //   status: 'pending',
-    //   callback_raw: stkPushResponse
-    // }
-    //
-    // This allows tracking:
-    // - Which transactions are awaiting payment
-    // - How long customers take to respond
-    // - Abandoned transactions (never get callback)
-    // ==============================================================================
-
     // Check if the request was successful
     if (stkPushResponse.ResponseCode !== "0") {
       return new Response(
@@ -338,6 +312,55 @@ Deno.serve(async (req) => {
         }),
         { status: 400, headers: { "Content-Type": "application/json" } },
       )
+    }
+
+    // ==============================================================================
+    // Store Pending Transaction After Successful STK Initiation
+    // ==============================================================================
+    // When M-Pesa returns a successful CheckoutRequestID, store the transaction
+    // in the database with status='pending' to track it until callback arrives.
+    // ==============================================================================
+    try {
+      console.log("Attempting to insert pending transaction via Supabase REST API...")
+      
+      const transactionData = {
+        checkout_request_id: stkPushResponse.CheckoutRequestID,
+        merchant_request_id: stkPushResponse.RequestID,
+        business_id: body.business_id,
+        account_reference: body.account_reference,
+        phone_number: phoneValidation.formattedPhone,
+        amount: Number(body.amount),
+        result_code: 0,
+        result_desc: "STK Push initiated - awaiting customer response",
+        status: "pending",
+        callback_raw: stkPushResponse,
+      }
+      
+      console.log("Transaction data to insert:", JSON.stringify(transactionData))
+      
+      // Use Supabase REST API directly via fetch
+      const apiUrl = `${supabaseUrl}/rest/v1/transactions`
+      const insertResponse = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${supabaseKey}`,
+          "Prefer": "return=representation",
+        },
+        body: JSON.stringify(transactionData),
+      })
+
+      const insertResult = await insertResponse.json()
+      
+      if (!insertResponse.ok) {
+        console.error("Database insert error via REST API:", insertResponse.status, JSON.stringify(insertResult))
+        // Log error but don't fail the request since STK was initiated successfully
+      } else {
+        console.log("Pending transaction recorded successfully via REST API:", JSON.stringify(insertResult))
+      }
+    } catch (err) {
+      console.error("Exception while recording pending transaction:", err)
+      // Log error but don't fail the request since STK was initiated successfully
     }
 
     // Return successful response
