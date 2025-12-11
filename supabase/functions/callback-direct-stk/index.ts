@@ -106,13 +106,35 @@ Deno.serve(async (req) => {
     
     console.log("Account reference:", accountRef)
     
-    const [businessId, actualAccountReference] = accountRef.includes(":")
+    let [businessId, actualAccountReference] = accountRef.includes(":")
       ? accountRef.split(":", 1).length === 2 
         ? accountRef.split(":")
         : ["unknown", accountRef]
       : ["unknown", accountRef]
 
     console.log("Parsed business_id:", businessId, "account_reference:", actualAccountReference)
+
+    // If business_id is still unknown, try to look it up from pending transactions
+    if (businessId === "unknown") {
+      console.log("Business ID unknown, attempting to look up from pending transactions...")
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")
+      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ||
+        Deno.env.get("SUPABASE_ANON_KEY")
+      
+      if (supabaseUrl && supabaseKey) {
+        const supabase = createClient(supabaseUrl, supabaseKey)
+        const { data: pendingTx } = await supabase
+          .from("transactions")
+          .select("business_id")
+          .eq("checkout_request_id", stkCallback.CheckoutRequestID)
+          .single()
+        
+        if (pendingTx?.business_id) {
+          businessId = pendingTx.business_id
+          console.log("Found business_id from pending transaction:", businessId)
+        }
+      }
+    }
 
     // Map M-Pesa result code to specific status
     const transactionStatus = mapResultCodeToStatus(stkCallback.ResultCode)
@@ -121,7 +143,7 @@ Deno.serve(async (req) => {
     const transactionRecord: TransactionRecord = {
       checkout_request_id: stkCallback.CheckoutRequestID,
       merchant_request_id: stkCallback.MerchantRequestID,
-      business_id: businessId,
+      business_id: businessId === "unknown" ? "caan-developers" : businessId, // Fallback to first business
       account_reference: actualAccountReference,
       phone_number: String(metadata.PhoneNumber || ""),
       amount: Number(metadata.Amount || 0),
