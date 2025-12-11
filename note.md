@@ -2,6 +2,8 @@
 
 This is a simple backend implementation for handling M-Pesa transactions using Supabase as the database.
 
+## Task 1: Setting up Supabase Local Development Environment
+
 ## Steps taken:-
 
 - ran `supabase init` to initialize a new Supabase project.
@@ -60,3 +62,110 @@ The `@^2.86.0` version specifier uses caret syntax, allowing minor and patch upd
 
 - ran `supabase functions serve direct-stk` to test the function locally.
 - made a POST request using curl to test the function and it worked.
+
+
+### Next Steps
+- Implement the M-Pesa STK Push logic within the `direct-stk` function.
+- Request to direct-stk endpoint with necessary parameters to initiate M-Pesa transactions:
+
+```bash
+curl -X POST http://localhost:54321/functions/v1/direct-stk \
+  -H "Content-Type: application/json" \
+  -d '{
+        "phone": "2547XXXXXXXX",
+        "amount": 100,
+        "accountReference": "internal_id_1234",
+        "transactionDesc": "Service Paid Through API"
+      }'
+```
+### Task 2
+- Implement M-Pesa STK Push logic in the `direct-stk` function to handle incoming requests and initiate transactions.
+
+#### Implementation Details
+
+The `direct-stk` function has been updated with complete M-Pesa STK Push integration. Here's what was implemented:
+
+**1. Request Validation**
+- Validates incoming POST requests with required fields: `phone`, `amount`, `accountReference`, and `transactionDesc`
+- Returns 400 error if any required fields are missing
+- Only accepts POST method requests
+
+**2. M-Pesa Authentication**
+- Implemented `getMpesaAccessToken()` function that:
+  - Uses Safaricom's Daraja API OAuth endpoint
+  - Requires `MPESA_CONSUMER_KEY` and `MPESA_CONSUMER_SECRET` environment variables
+  - Returns an access token for subsequent API calls
+
+**3. STK Push Initiation**
+- Implemented `initiateSTKPush()` function that:
+  - Formats phone numbers to international format
+  - Generates timestamp in required format
+  - Creates password using Base64 encoding: `Base64(BusinessShortCode + Passkey + Timestamp)`
+  - Sends request to Safaricom's STK Push endpoint: `https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest`
+  - Requires environment variables: `MPESA_BUSINESS_SHORT_CODE` and `MPESA_PASSKEY`
+
+**4. Response Handling**
+- Parses M-Pesa API response
+- Returns success (ResponseCode: "0") with `CheckoutRequestID` and `RequestID`
+- Returns error details if the request fails
+- Includes proper HTTP status codes (200 for success, 400 for M-Pesa errors, 500 for server errors)
+
+**5. Environment Variables Required**
+```
+MPESA_CONSUMER_KEY=<your_consumer_key>
+MPESA_CONSUMER_SECRET=<your_consumer_secret>
+MPESA_BUSINESS_SHORT_CODE=<your_business_short_code>
+MPESA_PASSKEY=<your_passkey>
+```
+
+**6. Testing the Implementation**
+To test the function locally:
+```bash
+curl -X POST http://localhost:54321/functions/v1/direct-stk \
+  -H "Content-Type: application/json" \
+  -d '{
+    "phone": "2547XXXXXXXX",
+    "amount": 100,
+    "accountReference": "internal_id_1234",
+    "transactionDesc": "Service Paid Through API"
+  }'
+```
+
+#### Response Examples
+
+**Success Response:**
+```json
+{
+  "success": true,
+  "message": "STK Push initiated successfully",
+  "checkoutRequestID": "ws_CO_DMZ_xxxxx",
+  "requestID": "10101-xxxxx-xxxxx"
+}
+```
+
+**Error Response (Missing Fields):**
+```json
+{
+  "error": "Missing required fields: phone, amount, accountReference, transactionDesc"
+}
+```
+
+**Error Response (Invalid M-Pesa Response):**
+```json
+{
+  "success": false,
+  "message": "<M-Pesa error description>",
+  "checkoutRequestID": null
+}
+```
+
+#### Notes
+- The function uses Safaricom's sandbox environment. Update URLs to production when ready.
+- Set the callback URL in the `CallBackURL` field to handle M-Pesa payment confirmations.
+- Phone numbers should be in format: 2547XXXXXXXX (with country code)
+
+#### Next Steps
+- Set up database tables to store transaction records
+- Implement callback endpoint to handle M-Pesa payment confirmations
+- Add database integration to log all transactions
+- Implement transaction status tracking
