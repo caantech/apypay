@@ -81,3 +81,9 @@ Verify which environment your M-Pesa credentials are for:
 3. **Deploy**: Run `supabase functions deploy direct-stk`
 4. **Test**: Call the endpoint and check error response for M-Pesa API details
 5. **Debug**: Use returned `mpesaBaseUrl` to verify correct environment is being used
+
+
+```curl
+
+curl -X POST "https://sgyoocjbdfwzygmpmurc.supabase.co/functions/v1/direct-stk" -H "Content-Type: application/json" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNneW9vY2piZGZ3enlnbXBtdXJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQyNzc0ODMsImV4cCI6MjA3OTg1MzQ4M30.BQ5i6ZQXMenWL5S9kv1Bvh7wMU7NG36xz61tneYvxEE" -d '{"mpesa_number":"0723224644","amount":1,"account_reference":"test002","transaction_desc":"Test Payment 2","business_id":"caan-developers"}'
+```
