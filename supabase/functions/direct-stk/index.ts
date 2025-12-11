@@ -69,12 +69,8 @@ interface MpesaResponse {
 }
 
 // M-Pesa API Configuration
-// Use MPESA_API_ENV environment variable to switch between 'sandbox' and 'production'
-// Defaults to 'production' for security
-const MPESA_ENV = Deno.env.get("MPESA_API_ENV") || "production"
-const MPESA_BASE_URL = MPESA_ENV === "sandbox"
-  ? "https://sandbox.safaricom.co.ke"
-  : "https://api.safaricom.co.ke"
+// Production endpoint only - this is a production-ready backend
+const MPESA_BASE_URL = Deno.env.get("MPESA_PROD_URL") || "https://api.safaricom.co.ke"
 
 // Function to get M-Pesa access token
 async function getMpesaAccessToken(
@@ -361,8 +357,6 @@ Deno.serve(async (req) => {
       JSON.stringify({
         error: "Internal server error",
         details: error instanceof Error ? error.message : String(error),
-        mpesaEnv: MPESA_ENV,
-        mpesaBaseUrl: MPESA_BASE_URL,
       }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     )
