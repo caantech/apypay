@@ -1,0 +1,7 @@
+{
+  "mpesa_number": "0723224644",
+  "amount": 1,
+  "account_reference": "test-uuid-001",
+  "transaction_desc": "Test",
+  "business_id": "caan-developers"
+}
