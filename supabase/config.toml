@@ -366,3 +366,25 @@ entrypoint = "./functions/direct-stk/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/direct-stk/*.html" ]
+
+[functions.popup-stk]
+enabled = true
+verify_jwt = true
+import_map = "./functions/popup-stk/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/popup-stk/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/popup-stk/*.html" ]
+
+[functions.callback-direct-stk]
+enabled = true
+verify_jwt = true
+import_map = "./functions/callback-direct-stk/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/callback-direct-stk/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/callback-direct-stk/*.html" ]

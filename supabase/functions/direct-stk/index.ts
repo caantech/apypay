@@ -7,10 +7,10 @@ import "jsr:@supabase/functions-js@^2.86.0/edge-runtime.d.ts"
 
 // Interface for the incoming request
 interface STKPushRequest {
-  phone: string
+  mpesa_number: string
   amount: number
-  accountReference: string
-  transactionDesc: string
+  account_reference: string
+  transaction_desc: string
 }
 
 // Interface for M-Pesa API response
@@ -42,6 +42,40 @@ async function getMpesaAccessToken(
   return data.access_token
 }
 
+// Function to validate Safaricom phone number
+function validateSafaricomNumber(phone: string): {
+  valid: boolean
+  error?: string
+  formattedPhone?: string
+} {
+  // Remove any non-digit characters
+  const cleanedPhone = phone.replace(/\D/g, "")
+
+  // Check if it's a valid Kenyan Safaricom number
+  // Valid formats: 254722123456, 0722123456, +254722123456
+  const safaricomPattern = /^(?:254|\+254|0)?(7[0-9]{8})$/
+  
+  if (!safaricomPattern.test(phone)) {
+    return {
+      valid: false,
+      error: "Invalid Safaricom phone number. Please use format: 0722123456, 254722123456, or +254722123456",
+    }
+  }
+
+  // Format to international format: 254722123456
+  let formattedPhone = cleanedPhone
+  if (formattedPhone.startsWith("0")) {
+    formattedPhone = "254" + formattedPhone.substring(1)
+  } else if (!formattedPhone.startsWith("254")) {
+    formattedPhone = "254" + formattedPhone
+  }
+
+  return {
+    valid: true,
+    formattedPhone,
+  }
+}
+
 // Function to initiate STK Push
 async function initiateSTKPush(
   request: STKPushRequest,
@@ -51,8 +85,8 @@ async function initiateSTKPush(
 ): Promise<MpesaResponse> {
   const timestamp = new Date().toISOString().replace(/[:-]|\.000Z/g, "").slice(0, 14)
   
-  // Format phone number to international format (remove + if present)
-  const formattedPhone = request.phone.replace(/^\+/, "")
+  // Format phone number to international format
+  const { formattedPhone } = validateSafaricomNumber(request.mpesa_number)
   
   // Generate password: Base64(BusinessShortCode + Passkey + Timestamp)
   const password = btoa(`${businessShortCode}${passkey}${timestamp}`)
@@ -66,9 +100,9 @@ async function initiateSTKPush(
     PartyA: formattedPhone,
     PartyB: businessShortCode,
     PhoneNumber: formattedPhone,
-    CallBackURL: "https://your-callback-url/callback", // Update this with your actual callback URL
-    AccountReference: request.accountReference,
-    TransactionDesc: request.transactionDesc,
+    CallBackURL: Deno.env.get("CALLBACK_URL") || "https://your-callback-url/callback",
+    AccountReference: request.account_reference,
+    TransactionDesc: request.transaction_desc,
   }
 
   const response = await fetch(
@@ -101,10 +135,31 @@ Deno.serve(async (req) => {
     const body: STKPushRequest = await req.json()
 
     // Validate required fields
-    if (!body.phone || !body.amount || !body.accountReference || !body.transactionDesc) {
+    if (!body.mpesa_number || !body.amount || !body.account_reference || !body.transaction_desc) {
       return new Response(
         JSON.stringify({
-          error: "Missing required fields: phone, amount, accountReference, transactionDesc",
+          error: "Missing required fields: mpesa_number, amount, account_reference, transaction_desc",
+        }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      )
+    }
+
+    // Validate Safaricom phone number
+    const phoneValidation = validateSafaricomNumber(body.mpesa_number)
+    if (!phoneValidation.valid) {
+      return new Response(
+        JSON.stringify({
+          error: phoneValidation.error,
+        }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      )
+    }
+
+    // Validate amount
+    if (typeof body.amount !== "number" || body.amount <= 0) {
+      return new Response(
+        JSON.stringify({
+          error: "Amount must be a positive number",
         }),
         { status: 400, headers: { "Content-Type": "application/json" } },
       )
@@ -175,8 +230,21 @@ Deno.serve(async (req) => {
 /* To invoke locally:
 
   1. Run `supabase start` (see: https://supabase.com/docs/reference/cli/supabase-start)
-  2. Make an HTTP request:
+  2. Make an HTTP request with proper M-Pesa credentials in .env:
 
-  curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/direct-stk' --header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0' --header 'Content-Type: application/json' --data '{"name":"Functions"}'
+  curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/direct-stk' \
+    --header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0' \
+    --header 'Content-Type: application/json' \
+    --data '{
+      "mpesa_number": "0723224644",
+      "amount": 100,
+      "account_reference": "test_001",
+      "transaction_desc": "Test Payment"
+    }'
+
+  Valid Safaricom phone number formats:
+  - 0722123456 (local format)
+  - 254722123456 (international format)
+  - +254722123456 (international with +)
 
 */

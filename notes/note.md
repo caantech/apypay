@@ -169,3 +169,36 @@ curl -X POST http://localhost:54321/functions/v1/direct-stk \
 - Implement callback endpoint to handle M-Pesa payment confirmations
 - Add database integration to log all transactions
 - Implement transaction status tracking
+
+
+### task 3
+
+I have the supabase MCP and supabase CLI set, get the "SUPABASE_ANON_KEY=<your_supabase_anon_key>" and update #file:.env 
+
+#### report
+
+**Task Completed Successfully!**
+
+Used the Supabase MCP to retrieve the project credentials and update the `.env` file:
+
+**Steps Executed:**
+1. Listed all Supabase projects using `mcp_supabase_list_projects`
+   - Found the "apypay" project with ID: `sgyoocjbdfwzygmpmurc`
+
+2. Retrieved publishable keys using `mcp_supabase_get_publishable_keys`
+   - Retrieved the legacy anon key (JWT-based)
+   - Also available: modern publishable key format `sb_publishable_TKFmwEZMkDwX83bhfR0P8w_bEFlWke-`
+
+3. Retrieved the project URL: `https://sgyoocjbdfwzygmpmurc.supabase.co`
+
+4. Updated `.env` file with:
+   - **SUPABASE_URL:** `https://sgyoocjbdfwzygmpmurc.supabase.co`
+   - **SUPABASE_ANON_KEY:** `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNneW9vY2piZGZ3enlnbXBtdXJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQyNzc0ODMsImV4cCI6MjA3OTg1MzQ4M30.BQ5i6ZQXMenWL5S9kv1Bvh7wMU7NG36xz61tneYvxEE`
+
+**Available API Keys:**
+- **Legacy Anon Key (JWT):** Used above, good for backward compatibility
+- **Publishable Key:** `sb_publishable_TKFmwEZMkDwX83bhfR0P8w_bEFlWke-` (recommended for new applications)
+
+The `.env` file now contains all necessary Supabase credentials and placeholders for M-Pesa API credentials. Remember to:
+- Keep the `.env` file out of version control (add to `.gitignore`)
+- Fill in the M-Pesa credentials when you have them: `MPESA_CONSUMER_KEY`, `MPESA_CONSUMER_SECRET`, `MPESA_BUSINESS_SHORT_CODE`, `MPESA_PASSKEY`
