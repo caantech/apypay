@@ -28,6 +28,8 @@ interface MpesaCallbackPayload {
 interface TransactionRecord {
   checkout_request_id: string
   merchant_request_id: string
+  business_id: string
+  account_reference: string
   phone_number: string
   amount: number
   result_code: number
@@ -79,10 +81,18 @@ Deno.serve(async (req) => {
       ? extractCallbackMetadata(stkCallback.CallbackMetadata.Item)
       : {}
 
+    // Extract business_id from account reference (format: "business_id:account_reference")
+    const accountRef = String(metadata.AccountReference || stkCallback.CheckoutRequestID)
+    const [businessId, actualAccountReference] = accountRef.includes(":")
+      ? accountRef.split(":")
+      : ["unknown", accountRef]
+
     // Prepare transaction record
     const transactionRecord: TransactionRecord = {
       checkout_request_id: stkCallback.CheckoutRequestID,
       merchant_request_id: stkCallback.MerchantRequestID,
+      business_id: businessId,
+      account_reference: actualAccountReference,
       phone_number: String(metadata.PhoneNumber || ""),
       amount: Number(metadata.Amount || 0),
       result_code: stkCallback.ResultCode,
@@ -130,6 +140,7 @@ Deno.serve(async (req) => {
 
     // Log callback details
     console.log(`Payment ${stkCallback.ResultCode === 0 ? "successful" : "failed"}:`, {
+      businessId: businessId,
       checkoutRequestID: stkCallback.CheckoutRequestID,
       resultCode: stkCallback.ResultCode,
       resultDesc: stkCallback.ResultDesc,

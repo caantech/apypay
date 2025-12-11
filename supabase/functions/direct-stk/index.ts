@@ -11,6 +11,32 @@ interface STKPushRequest {
   amount: number
   account_reference: string
   transaction_desc: string
+  business_id: string
+}
+
+// List of valid businesses using the API
+const VALID_BUSINESSES = ["caan-developers", "caan-tech-foundation", "taji-ai"]
+
+// Function to validate business ID
+function validateBusinessId(businessId: string): {
+  valid: boolean
+  error?: string
+} {
+  if (!businessId || businessId.trim() === "") {
+    return {
+      valid: false,
+      error: "Business ID is required",
+    }
+  }
+
+  if (!VALID_BUSINESSES.includes(businessId.toLowerCase())) {
+    return {
+      valid: false,
+      error: `Invalid business ID. Valid businesses are: ${VALID_BUSINESSES.join(", ")}`,
+    }
+  }
+
+  return { valid: true }
 }
 
 // Interface for M-Pesa API response
@@ -101,7 +127,7 @@ async function initiateSTKPush(
     PartyB: businessShortCode,
     PhoneNumber: formattedPhone,
     CallBackURL: Deno.env.get("CALLBACK_URL") || "https://your-callback-url/callback",
-    AccountReference: request.account_reference,
+    AccountReference: `${request.business_id}:${request.account_reference}`,
     TransactionDesc: request.transaction_desc,
   }
 
@@ -135,10 +161,21 @@ Deno.serve(async (req) => {
     const body: STKPushRequest = await req.json()
 
     // Validate required fields
-    if (!body.mpesa_number || !body.amount || !body.account_reference || !body.transaction_desc) {
+    if (!body.mpesa_number || !body.amount || !body.account_reference || !body.transaction_desc || !body.business_id) {
       return new Response(
         JSON.stringify({
-          error: "Missing required fields: mpesa_number, amount, account_reference, transaction_desc",
+          error: "Missing required fields: mpesa_number, amount, account_reference, transaction_desc, business_id",
+        }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      )
+    }
+
+    // Validate business ID
+    const businessValidation = validateBusinessId(body.business_id)
+    if (!businessValidation.valid) {
+      return new Response(
+        JSON.stringify({
+          error: businessValidation.error,
         }),
         { status: 400, headers: { "Content-Type": "application/json" } },
       )
@@ -212,6 +249,7 @@ Deno.serve(async (req) => {
         message: "STK Push initiated successfully",
         checkoutRequestID: stkPushResponse.CheckoutRequestID,
         requestID: stkPushResponse.RequestID,
+        businessId: body.business_id,
       }),
       { status: 200, headers: { "Content-Type": "application/json" } },
     )
